@@ -15,7 +15,7 @@ Using a blue led should not require resistor, one may be needed for red or green
 
 A byte is sent as follow :
 
-Start(0) 8bit data Stop(1)
+Start(0) 8bit data 1bit parity Stop(1)
  
 Each bit is coded in manchester with 
 0 -> 10
@@ -33,39 +33,40 @@ N times Effective data excluding command symbols, with N < 32
 
 #include <TimerOne.h>
 #include <util/atomic.h>
+#include <util/parity.h> 
+
 //Start of what should be an include ...
 
-
 //#define TRANSMIT_SERIAL
-
+//#define WITH_PARITY_BIT
 
 // change to alter communication speed, 
-// will lower values will result in faster communication
+// lower values will result in faster communication
 // the receiver must be tuned to the same value
 #define SYMBOL_PERIOD 500 
 
-#define WORD_LENGTH 10
+#ifdef WITH_PARITY_BIT
+  #define WORD_LENGTH 11
+#else
+  #define WORD_LENGTH 10
+#endif
+
 #define SYNC_SYMBOL 0xD5
 #define ETX 0x03
 #define STX 0x02
 
 //Fast manipulation of LED IO. 
 //These defines are for a LED connected on D13
-/*#define OUT_LED() DDRB |= (1 << 5);
+#define OUT_LED() DDRB |= (1 << 5);
 #define SET_LED() PORTB |= (1 << 5)
 #define CLR_LED() PORTB &= ~(1 << 5)
-*/
+
 
 //These defines are for a RGB led connected to D2, D3, D4
 /*#define OUT_LED() DDRD |= ((1 << 2) | (1 << 3) | (1 << 4))
 #define SET_LED() PORTD |= ((1 << 2) | (1 << 3) | (1 << 4))
 #define CLR_LED() PORTD &= ~((1 << 2) | (1 << 3) | (1 << 4))
 */
-#define OUT_LED() DDRD |= ((1 << 2))
-#define SET_LED() PORTD |= ((1 << 2))
-#define CLR_LED() PORTD &= ~((1 << 2))
-
-
 
 unsigned char frame_buffer [38] ; //buffer for frame
 char frame_index = -1; // index in frame
@@ -80,6 +81,13 @@ unsigned long int manchester_data ;
 void to_manchester(unsigned char data, unsigned long int * data_manchester){
   unsigned int i ;
  (*data_manchester) = 0x02 ; // STOP symbol
+ #ifdef WITH_PARITY_BIT
+ Serial.println(parity_even_bit(data));
+ (*data_manchester) = (*data_manchester) << 1 ;
+ (*data_manchester) |= !parity_even_bit(data); // !PARITY bit
+ (*data_manchester) = (*data_manchester) << 1 ;
+ (*data_manchester) |= parity_even_bit(data); // PARITY bit
+ #endif
  (*data_manchester) = (*data_manchester) << 2 ;
   for(i = 0 ; i < 8; i ++){
     if(data & 0x80) (*data_manchester) |=  0x02  ; // data LSB first
@@ -88,6 +96,7 @@ void to_manchester(unsigned char data, unsigned long int * data_manchester){
     data = data << 1 ; // to next bit
   }
   (*data_manchester) |= 0x01 ; //START symbol
+  Serial.println((*data_manchester),BIN);
 }
 
 //emitter interrupt
@@ -166,12 +175,13 @@ void setup() {
 
 
 // the loop routine runs over and over again forever:
-char * msg = "Hello World" ;
+char * msg = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" ; // simplicity!
 char com_buffer [32] ;
 char com_buffer_nb_bytes = 0 ;
 void loop() {
   #ifdef TRANSMIT_SERIAL
   if(Serial.available() && transmitter_available()){ //constructing the data frame only if transmitter is ready to transmit
+    Serial.println("Recvd!");
     char c = Serial.read();
     com_buffer[com_buffer_nb_bytes] = c ;
     com_buffer_nb_bytes ++ ;
@@ -186,9 +196,10 @@ void loop() {
   delay(10);
   #else
     static int i = 0 ;
-    memcpy(com_buffer, msg, 11);
-    com_buffer[11] = i + '0' ;
-    if(write(com_buffer, 12) < 0){
+    memcpy(com_buffer, msg, 32);
+    com_buffer[31] = i + '0' ;
+    if(write(msg, 32) < 0){ // WITHOUT number at the end
+    //if(write(com_buffer, 32) < 0){ // WITH number at the end
       delay(10);
     }else{
       i ++ ; 
