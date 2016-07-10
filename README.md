@@ -1,5 +1,3 @@
-# arduino
+# Arduino VLC
 
-Repository hosting my arduino experiences
-
-For more informations see the wiki : https://github.com/jpiat/arduino/wiki
+For more informations see the wiki : <https://github.com/mranno9/Arduino-VLC/wiki>
